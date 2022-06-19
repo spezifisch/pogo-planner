@@ -36,7 +36,7 @@ type boqConverter struct {
 
 func (bc *boqConverter) processCell(cell *geodex.BOQCell) {
 	bc.CellCount++
-	for _, poi := range cell.Stops {
+	for _, poi := range *cell {
 		bc.POICount++
 		if poi.IsGym {
 			bc.GymCount++
@@ -91,8 +91,8 @@ var rootCmd = &cobra.Command{
 
 		timeTrack(tStart, "boq parsing")
 
-		log.Infof("processed BOQ data: %d cells containing %d POIs with %d gyms, %d stops",
-			bc.CellCount, bc.POICount, bc.GymCount, bc.StopCount)
+		log.Infof("processed BOQ data: %d files with %d cells containing %d POIs with %d gyms, %d stops",
+			len(boqFiles), bc.CellCount, bc.POICount, bc.GymCount, bc.StopCount)
 		if boq.RunError != nil {
 			log.WithError(boq.RunError).Error("boq runner failed!")
 		}

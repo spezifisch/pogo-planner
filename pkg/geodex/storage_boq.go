@@ -98,14 +98,6 @@ func (db *BOQDB) Run() (err error) {
 		br := bufio.NewReaderSize(f, 65536)
 		d := json.NewDecoder(br)
 
-		// skip the first tokens:
-		// {
-		// "2/123123123"
-		if err = skipTokens(d, 2); err != nil {
-			db.RunError = err
-			return
-		}
-
 		for d.More() {
 			// check for cancel signal
 			select {
@@ -122,18 +114,12 @@ func (db *BOQDB) Run() (err error) {
 			err = d.Decode(&cell)
 			if err != nil {
 				db.RunError = err
+				log.WithError(err).Error("cell decode failed")
 				return
 			}
 
 			// send to output
 			db.output <- &cell
-
-			// after BOQCell skip the next token (cell id) before the next Cell starts:
-			// "2/321321321"
-			if err = skipTokens(d, 1); err != nil {
-				db.RunError = err
-				return
-			}
 		}
 		if !run {
 			break

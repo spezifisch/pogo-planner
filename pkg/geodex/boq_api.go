@@ -16,9 +16,7 @@
 package geodex
 
 // BOQCell are the values from the outer dict that BookOfQuests returns
-type BOQCell struct {
-	Stops []*BOQStop `json:"stops"`
-}
+type BOQCell []BOQStop
 
 // BOQStop has name and location for POIs
 type BOQStop struct {
