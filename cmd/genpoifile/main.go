@@ -27,6 +27,37 @@ import (
 	"github.com/spezifisch/pogo-planner/pkg/geodex"
 )
 
+type boqConverter struct {
+	CellCount int
+	POICount  int
+	GymCount  int
+	StopCount int
+}
+
+func (bc *boqConverter) processCell(cell *geodex.BOQCell) {
+	bc.CellCount++
+	for _, poi := range cell.Stops {
+		bc.POICount++
+		if poi.IsGym {
+			bc.GymCount++
+
+			// check data from BOQ
+			if len(poi.Location.Coordinates) != 2 {
+				log.Error("invalid coordinates:", poi.Location.Coordinates)
+				return
+			}
+
+			// get gym GUID from tile db
+			// gymLocation := pogo.Location{
+			// 	Latitude:  poi.Location.Coordinates[1],
+			// 	Longitude: poi.Location.Coordinates[0],
+			// }
+		} else if poi.IsStop {
+			bc.StopCount++
+		}
+	}
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "genpoifile",
 	Short: "Generate POI file for import in mapping applications",
@@ -39,8 +70,7 @@ var rootCmd = &cobra.Command{
 		boqFiles, _ := cmd.Flags().GetStringArray("boq")
 		boqOutput := make(chan *geodex.BOQCell)
 		boqCancel := make(chan bool)
-		boqDone := make(chan bool)
-		boq, err := geodex.NewBOQDB(boqFiles, boqOutput, boqCancel, boqDone)
+		boq, err := geodex.NewBOQDB(boqFiles, boqOutput, boqCancel)
 		if err != nil {
 			log.WithError(err).Error("got invalid boq files")
 			return
@@ -49,78 +79,20 @@ var rootCmd = &cobra.Command{
 		// let BOQ reader parse all files, outputting cells to boqOutput
 		go boq.Run()
 
-		boqCellCount := 0
-		boqPOICount := 0
-		boqGymCount := 0
-		namesAdded := 0
-		namesKept := 0
-		for {
-			done := false
-
-			select {
-			case cell := <-boqOutput:
-				boqCellCount++
-				for _, poi := range cell.Stops {
-					boqPOICount++
-					if poi.IsGym {
-						boqGymCount++
-
-						// check data from BOQ
-						if len(poi.Location.Coordinates) != 2 {
-							log.Error("invalid coordinates:", poi.Location.Coordinates)
-							return
-						}
-						if poi.Name == "" {
-							continue
-						}
-
-						// get gym GUID from tile db
-						gymLocation := pogo.Location{
-							Latitude:  poi.Location.Coordinates[1],
-							Longitude: poi.Location.Coordinates[0],
-						}
-						tFort, err := tdb.GetNearestFort(gymLocation, 0.1)
-						if err != nil {
-							// fort doesn't exist in tile38 db, that's ok
-							continue
-						}
-
-						// get fort from disk
-						dFort, err := ddb.GetFort(*tFort.GUID)
-						if err != nil {
-							// doesn't exist on disk. that's ok
-							continue
-						}
-						if dFort.Name != nil {
-							// already has a name
-							namesKept++
-							continue
-						}
-
-						// set name and save to disk
-						dFort.Name = &poi.Name
-						if err = ddb.SaveFort(dFort); err != nil {
-							log.Errorf("couldn't edit fort %s", *tFort.GUID)
-							return
-						}
-						namesAdded++
-					}
-				}
-			case <-boqDone: // boq.Run() ended
-				done = true
-			}
-
-			if done {
+		bc := boqConverter{}
+		count := 0
+		for cell := range boqOutput {
+			if cell == nil {
 				break
 			}
+			count++
+			bc.processCell(cell)
 		}
 
 		timeTrack(tStart, "boq parsing")
 
-		log.Infof("processed BOQ data: %d cells containing %d POIs with %d gyms",
-			boqCellCount, boqPOICount, boqGymCount)
-		log.Infof("added names to %d gyms, got %d gyms which already had a name",
-			namesAdded, namesKept)
+		log.Infof("processed BOQ data: %d cells containing %d POIs with %d gyms, %d stops",
+			bc.CellCount, bc.POICount, bc.GymCount, bc.StopCount)
 		if boq.RunError != nil {
 			log.WithError(boq.RunError).Error("boq runner failed!")
 		}

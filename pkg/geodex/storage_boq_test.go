@@ -1,4 +1,5 @@
-// This file is part of silphtelescope (https://github.com/spezifisch/silphtelescope).
+// This file is part of pogo-planner (https://github.com/spezifisch/pogo-planner).
+// Based on silphtelescope (https://github.com/spezifisch/silphtelescope).
 // Copyright (C) 2021-2022 spezifisch <spezifisch-7e6@below.fr> (https://github.com/spezifisch).
 //
 // This program is free software: you can redistribute it and/or modify it

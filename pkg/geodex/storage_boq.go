@@ -1,4 +1,5 @@
-// This file is part of silphtelescope (https://github.com/spezifisch/silphtelescope).
+// This file is part of pogo-planner (https://github.com/spezifisch/pogo-planner).
+// Based on silphtelescope (https://github.com/spezifisch/silphtelescope).
 // Copyright (C) 2021-2022 spezifisch <spezifisch-7e6@below.fr> (https://github.com/spezifisch).
 //
 // This program is free software: you can redistribute it and/or modify it
@@ -21,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // BOQDB is a read-only wrapper for a Book Of Quests stops JSON.
@@ -29,11 +32,10 @@ type BOQDB struct {
 	files    []string
 	output   chan *BOQCell
 	cancel   chan bool
-	done     chan bool
 }
 
 // NewBOQDB returns a ready-to-use BOQDB object
-func NewBOQDB(files []string, output chan *BOQCell, cancel, done chan bool) (db *BOQDB, err error) {
+func NewBOQDB(files []string, output chan *BOQCell, cancel chan bool) (db *BOQDB, err error) {
 	err = checkFiles(files)
 	if err != nil {
 		return
@@ -43,7 +45,6 @@ func NewBOQDB(files []string, output chan *BOQCell, cancel, done chan bool) (db 
 		files:  files,
 		output: output,
 		cancel: cancel,
-		done:   done,
 	}, nil
 }
 
@@ -75,7 +76,8 @@ func skipTokens(d *json.Decoder, count int) (err error) {
 }
 
 func (db *BOQDB) signalDone() {
-	db.done <- true
+	log.Info("boq parser done signal")
+	db.output <- nil
 }
 
 // Run parses all files
@@ -83,6 +85,7 @@ func (db *BOQDB) Run() (err error) {
 	db.RunError = nil
 	defer db.signalDone()
 	run := true
+	log.WithField("files", db.files).Info("starting boq parser")
 	for _, file := range db.files {
 		var f *os.File
 		f, err = os.Open(file)
@@ -136,5 +139,6 @@ func (db *BOQDB) Run() (err error) {
 			break
 		}
 	}
+	log.Info("boq parser returns ok")
 	return
 }
