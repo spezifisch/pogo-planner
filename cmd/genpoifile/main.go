@@ -49,12 +49,16 @@ func (bc *boqConverter) processCell(cell *geodex.BOQCell) {
 	for _, poi := range *cell {
 		bc.POICount++
 		var iconHref string
+		var iconScale float64
 		if poi.IsGym {
 			bc.GymCount++
-			iconHref = icon.PaddleHref("wht-stars")
+			// see https://kml4earth.appspot.com/icons.html
+			iconHref = icon.PaddleHref("blu-stars-lv")
+			iconScale = 0.7
 		} else if poi.IsStop {
 			bc.StopCount++
-			iconHref = icon.PaddleHref("ltblu-circle")
+			iconHref = icon.PaddleHref("grn-circle-lv")
+			iconScale = 0.5
 		} else {
 			continue
 		}
@@ -89,7 +93,7 @@ func (bc *boqConverter) processCell(cell *geodex.BOQCell) {
 							iconHref,
 						),
 					),
-					kml.Scale(0.5),
+					kml.Scale(iconScale),
 				),
 			),
 		)
