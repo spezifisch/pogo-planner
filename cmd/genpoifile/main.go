@@ -143,9 +143,22 @@ var rootCmd = &cobra.Command{
 	Long:  `Get Pokestop and Gym data from multiple sources and generate a GPX file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
-		tStart := time.Now()
+
+		outputFile, err := cmd.Flags().GetString("output")
+		if err != nil || outputFile == "" {
+			log.WithError(err).Error("invalid output file")
+			return
+		}
+
+		output, err := os.Create(outputFile)
+		if err != nil {
+			log.WithField("name", outputFile).WithError(err).Error("failed creating output file")
+			return
+		}
+		defer output.Close()
 
 		// setup BOQ parser
+		tStart := time.Now()
 		boqFiles, _ := cmd.Flags().GetStringArray("boq")
 		boqOutput := make(chan *geodex.BOQCell, 4)
 		boqCancel := make(chan bool)
@@ -160,6 +173,7 @@ var rootCmd = &cobra.Command{
 
 		bc := boqConverter{
 			MapName: fmt.Sprintf("PogoPlanner %s", time.Now().Truncate(time.Minute).String()),
+			Output:  output,
 
 			gymFolders:  []kml.Element{},
 			stopFolders: []kml.Element{},
@@ -174,8 +188,10 @@ var rootCmd = &cobra.Command{
 		}
 
 		timeTrack(tStart, "boq parsing")
+		tStart = time.Now()
 
 		bc.generateKML()
+		timeTrack(tStart, "kml output")
 
 		log.Infof("processed BOQ data: %d files with %d cells containing %d POIs with %d gyms, %d stops",
 			len(boqFiles), bc.CellCount, bc.POICount, bc.GymCount, bc.StopCount)
@@ -193,8 +209,10 @@ func timeTrack(start time.Time, name string) {
 
 func main() {
 	rootCmd.PersistentFlags().StringArrayP("boq", "b", []string{}, "BookOfQuests JSON file(s)")
+	rootCmd.PersistentFlags().StringP("output", "o", "", "Output KML file")
 
-	rootCmd.MarkPersistentFlagRequired("geodex")
+	rootCmd.MarkPersistentFlagRequired("boq")
+	rootCmd.MarkPersistentFlagRequired("output")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
