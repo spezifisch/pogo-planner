@@ -39,8 +39,8 @@ type boqConverter struct {
 	GymCount  int
 	StopCount int
 
-	gymFolders  []kml.Element
-	stopFolders []kml.Element
+	gyms  []kml.Element
+	stops []kml.Element
 }
 
 func (bc *boqConverter) processCell(cell *geodex.BOQCell) {
@@ -74,31 +74,29 @@ func (bc *boqConverter) processCell(cell *geodex.BOQCell) {
 			name = fmt.Sprintf("Stop %d", bc.StopCount)
 		}
 
-		fortFolder := kml.Folder(
+		fort := kml.Placemark(
 			kml.Name(name),
-			kml.Placemark(
-				kml.Point(
-					kml.Coordinates(kml.Coordinate{
-						Lon: poi.Location.Coordinates[0],
-						Lat: poi.Location.Coordinates[1],
-					}),
-				),
-				kml.Style(
-					kml.IconStyle(
-						kml.Icon(
-							kml.Href(
-								iconHref,
-							),
+			kml.Point(
+				kml.Coordinates(kml.Coordinate{
+					Lon: poi.Location.Coordinates[0],
+					Lat: poi.Location.Coordinates[1],
+				}),
+			),
+			kml.Style(
+				kml.IconStyle(
+					kml.Icon(
+						kml.Href(
+							iconHref,
 						),
-						kml.Scale(0.5),
 					),
+					kml.Scale(0.5),
 				),
 			),
 		)
 		if poi.IsGym {
-			bc.gymFolders = append(bc.gymFolders, fortFolder)
+			bc.gyms = append(bc.gyms, fort)
 		} else if poi.IsStop {
-			bc.stopFolders = append(bc.stopFolders, fortFolder)
+			bc.stops = append(bc.stops, fort)
 		}
 	}
 }
@@ -109,7 +107,7 @@ func (bc *boqConverter) generateKML() {
 			kml.Name("Gyms"),
 			kml.Open(false),
 		},
-			bc.gymFolders...,
+			bc.gyms...,
 		)...,
 	)
 
@@ -118,7 +116,7 @@ func (bc *boqConverter) generateKML() {
 			kml.Name("Stops"),
 			kml.Open(false),
 		},
-			bc.stopFolders...,
+			bc.stops...,
 		)...,
 	)
 
@@ -175,8 +173,8 @@ var rootCmd = &cobra.Command{
 			MapName: fmt.Sprintf("PogoPlanner %s", time.Now().Truncate(time.Minute).String()),
 			Output:  output,
 
-			gymFolders:  []kml.Element{},
-			stopFolders: []kml.Element{},
+			gyms:  []kml.Element{},
+			stops: []kml.Element{},
 		}
 		count := 0
 		for cell := range boqOutput {
