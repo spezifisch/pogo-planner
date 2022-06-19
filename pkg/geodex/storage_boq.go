@@ -25,13 +25,15 @@ import (
 
 // BOQDB is a read-only wrapper for a Book Of Quests stops JSON.
 type BOQDB struct {
-	files  []string
-	output chan *BOQCell
-	cancel chan bool
+	RunError error
+	files    []string
+	output   chan *BOQCell
+	cancel   chan bool
+	done     chan bool
 }
 
 // NewBOQDB returns a ready-to-use BOQDB object
-func NewBOQDB(files []string, output chan *BOQCell, cancel chan bool) (db *BOQDB, err error) {
+func NewBOQDB(files []string, output chan *BOQCell, cancel, done chan bool) (db *BOQDB, err error) {
 	err = checkFiles(files)
 	if err != nil {
 		return
@@ -41,6 +43,7 @@ func NewBOQDB(files []string, output chan *BOQCell, cancel chan bool) (db *BOQDB
 		files:  files,
 		output: output,
 		cancel: cancel,
+		done:   done,
 	}, nil
 }
 
@@ -71,14 +74,21 @@ func skipTokens(d *json.Decoder, count int) (err error) {
 	return
 }
 
+func (db *BOQDB) signalDone() {
+	db.done <- true
+}
+
 // Run parses all files
 func (db *BOQDB) Run() (err error) {
+	db.RunError = nil
+	defer db.signalDone()
 	run := true
 	for _, file := range db.files {
 		var f *os.File
 		f, err = os.Open(file)
 		if err != nil {
-			return err
+			db.RunError = err
+			return
 		}
 		defer f.Close()
 
@@ -89,6 +99,7 @@ func (db *BOQDB) Run() (err error) {
 		// {
 		// "2/123123123"
 		if err = skipTokens(d, 2); err != nil {
+			db.RunError = err
 			return
 		}
 
@@ -107,6 +118,7 @@ func (db *BOQDB) Run() (err error) {
 			var cell BOQCell
 			err = d.Decode(&cell)
 			if err != nil {
+				db.RunError = err
 				return
 			}
 
@@ -116,6 +128,7 @@ func (db *BOQDB) Run() (err error) {
 			// after BOQCell skip the next token (cell id) before the next Cell starts:
 			// "2/321321321"
 			if err = skipTokens(d, 1); err != nil {
+				db.RunError = err
 				return
 			}
 		}
