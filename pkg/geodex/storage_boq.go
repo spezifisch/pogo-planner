@@ -76,7 +76,7 @@ func skipTokens(d *json.Decoder, count int) (err error) {
 }
 
 func (db *BOQDB) signalDone() {
-	log.Info("boq parser done signal")
+	log.Debug("boq parser done signal")
 	db.output <- nil
 }
 
@@ -85,7 +85,7 @@ func (db *BOQDB) Run() (err error) {
 	db.RunError = nil
 	defer db.signalDone()
 	run := true
-	log.WithField("files", db.files).Info("starting boq parser")
+	log.WithField("files", db.files).Debug("starting boq parser")
 	for _, file := range db.files {
 		var f *os.File
 		f, err = os.Open(file)
@@ -114,7 +114,7 @@ func (db *BOQDB) Run() (err error) {
 			err = d.Decode(&cell)
 			if err != nil {
 				db.RunError = err
-				log.WithError(err).Error("cell decode failed")
+				log.WithError(err).Debug("cell decode failed")
 				return
 			}
 
@@ -125,6 +125,6 @@ func (db *BOQDB) Run() (err error) {
 			break
 		}
 	}
-	log.Info("boq parser returns ok")
+	log.Debug("boq parser returns ok")
 	return
 }

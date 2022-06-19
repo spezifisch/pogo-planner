@@ -18,44 +18,123 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/twpayne/go-kml/v2"
+	"github.com/twpayne/go-kml/v2/icon"
 
 	"github.com/spezifisch/pogo-planner/pkg/geodex"
 )
 
 type boqConverter struct {
+	MapName string
+	Output  io.Writer
+
 	CellCount int
 	POICount  int
 	GymCount  int
 	StopCount int
+
+	gymFolders  []kml.Element
+	stopFolders []kml.Element
 }
 
 func (bc *boqConverter) processCell(cell *geodex.BOQCell) {
 	bc.CellCount++
+
 	for _, poi := range *cell {
 		bc.POICount++
+		var iconHref string
 		if poi.IsGym {
 			bc.GymCount++
-
-			// check data from BOQ
-			if len(poi.Location.Coordinates) != 2 {
-				log.Error("invalid coordinates:", poi.Location.Coordinates)
-				return
-			}
-
-			// get gym GUID from tile db
-			// gymLocation := pogo.Location{
-			// 	Latitude:  poi.Location.Coordinates[1],
-			// 	Longitude: poi.Location.Coordinates[0],
-			// }
+			iconHref = icon.PaddleHref("wht-stars")
 		} else if poi.IsStop {
 			bc.StopCount++
+			iconHref = icon.PaddleHref("ltblu-circle")
+		} else {
+			continue
+		}
+
+		// check data from BOQ
+		if len(poi.Location.Coordinates) != 2 {
+			log.Error("invalid coordinates:", poi.Location.Coordinates)
+			return
+		}
+
+		var name string
+		if poi.Name != "" {
+			name = poi.Name
+		} else if poi.IsGym {
+			name = fmt.Sprintf("Gym %d", bc.GymCount)
+		} else if poi.IsStop {
+			name = fmt.Sprintf("Stop %d", bc.StopCount)
+		}
+
+		fortFolder := kml.Folder(
+			kml.Name(name),
+			kml.Placemark(
+				kml.Point(
+					kml.Coordinates(kml.Coordinate{
+						Lon: poi.Location.Coordinates[0],
+						Lat: poi.Location.Coordinates[1],
+					}),
+				),
+				kml.Style(
+					kml.IconStyle(
+						kml.Icon(
+							kml.Href(
+								iconHref,
+							),
+						),
+						kml.Scale(0.5),
+					),
+				),
+			),
+		)
+		if poi.IsGym {
+			bc.gymFolders = append(bc.gymFolders, fortFolder)
+		} else if poi.IsStop {
+			bc.stopFolders = append(bc.stopFolders, fortFolder)
 		}
 	}
+}
+
+func (bc *boqConverter) generateKML() {
+	wrapGymFolder := kml.Folder(
+		append([]kml.Element{
+			kml.Name("Gyms"),
+			kml.Open(false),
+		},
+			bc.gymFolders...,
+		)...,
+	)
+
+	wrapStopFolder := kml.Folder(
+		append([]kml.Element{
+			kml.Name("Stops"),
+			kml.Open(false),
+		},
+			bc.stopFolders...,
+		)...,
+	)
+
+	result := kml.KML(
+		kml.Document(
+			kml.Name(bc.MapName),
+			kml.Open(true),
+			wrapGymFolder,
+			wrapStopFolder,
+		),
+	)
+
+	if bc.Output == nil {
+		bc.Output = os.Stdout
+	}
+	result.WriteIndent(bc.Output, "", "  ")
 }
 
 var rootCmd = &cobra.Command{
@@ -68,7 +147,7 @@ var rootCmd = &cobra.Command{
 
 		// setup BOQ parser
 		boqFiles, _ := cmd.Flags().GetStringArray("boq")
-		boqOutput := make(chan *geodex.BOQCell)
+		boqOutput := make(chan *geodex.BOQCell, 4)
 		boqCancel := make(chan bool)
 		boq, err := geodex.NewBOQDB(boqFiles, boqOutput, boqCancel)
 		if err != nil {
@@ -79,7 +158,12 @@ var rootCmd = &cobra.Command{
 		// let BOQ reader parse all files, outputting cells to boqOutput
 		go boq.Run()
 
-		bc := boqConverter{}
+		bc := boqConverter{
+			MapName: fmt.Sprintf("PogoPlanner %s", time.Now().Truncate(time.Minute).String()),
+
+			gymFolders:  []kml.Element{},
+			stopFolders: []kml.Element{},
+		}
 		count := 0
 		for cell := range boqOutput {
 			if cell == nil {
@@ -90,6 +174,8 @@ var rootCmd = &cobra.Command{
 		}
 
 		timeTrack(tStart, "boq parsing")
+
+		bc.generateKML()
 
 		log.Infof("processed BOQ data: %d files with %d cells containing %d POIs with %d gyms, %d stops",
 			len(boqFiles), bc.CellCount, bc.POICount, bc.GymCount, bc.StopCount)
@@ -102,7 +188,7 @@ var rootCmd = &cobra.Command{
 // from: https://coderwall.com/p/cp5fya/measuring-execution-time-in-go
 func timeTrack(start time.Time, name string) {
 	elapsed := time.Since(start)
-	log.Printf("> %s took %s", name, elapsed)
+	log.Infof("%s took %s", name, elapsed)
 }
 
 func main() {
